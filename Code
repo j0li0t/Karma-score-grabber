@@ -1,0 +1,94 @@
+import praw, time
+
+r = praw.Reddit(client_id='client_ID',          # set up reddit object, https://praw.readthedocs.io/en/latest/getting_started/authentication.html
+                client_secret='client_secret',
+                user_agent='user_agent')
+
+posts = []      # array of post IDs
+drops = 180     # if a post gains fewer than 1 upvote in this many seconds, it will be dropped from the analysis
+stops = []      # array of IDs that should be ignored
+while True:
+    print(len(posts),"total posts and",len(posts)-len(stops),"active posts\n Getting new posts")
+    n = 60
+    cont = 0
+    try:                                                        # allows script to continue if internet drops, retries connection every n seconds
+        submissions = r.subreddit('all')                        # get r/all subreddit
+        submissions.random()                                    # grab random post to check connection
+        cont=1
+    except Exception:
+        while n >= 0:
+            print(n)
+            n-=1
+            time.sleep(1)
+    if cont==1:                                                 # only continues if post successfully collected
+        temp = []                                               # array of new IDs this loop, will be ignored when looking at previously colelcted IDs
+        data = open("data_file","a")                            # open data file to append new lines
+        for post in submissions.new(limit=30):                  # get 30 new posts
+            ID = post.id
+            if ID in stops or ID in posts:pass                  # only look at completely new IDs
+            else:
+                posts.append(ID)
+                output = ["NA"]
+                try:
+                    nsfw = "0"
+                    if post.over_18:nsfw="1"
+                    subr = str(post.subreddit)
+                    created = post.created
+                    temp.append(ID)
+                    author = str(post.author)
+                    skips = 0
+                    for n in r.redditor((author)).submissions.new(limit = 10):                      # check the author's last ten posts to see if any were made since 24 before post of interest
+                        if n.created > created-24*60*60 and t0 != created:skips = 1                 
+                    if skips == 1:
+                        stops.append(ID)
+                        output = [str(time.time()),subr,str(created),ID,author,"stop","NA",nsfw]    # output if author has made other recent posts
+                    else:
+                        user = r.redditor(str(author))
+                        link = str(user.link_karma)
+                        score = str(r.submission(id=ID).score)
+                        output = [str(time.time()),subr,str(created),ID,author,link,score,nsfw]     # output if everything goes correctly
+                    print(output)
+                except Exception as e:
+                    stops.append(ID)
+                    output = [str(time.time()),"NA","NA",ID,"NA","stop","NA","NA"]                  # output if error occurs, e.g. user deletes account
+                    print(output,e)
+                data.write(" ".join(output)+"\n")
+        data.close()
+        if len(posts)-len(stops)-len(temp)>0:print("Getting stored posts")
+        for ID in posts:
+            data = open("data_file.txt","a")
+            if ID in temp or ID in stops:pass                                                       # ignore specific IDs
+            else:
+                output=["NA"]
+                try:
+                    sub = r.submission(id=ID)
+                    subr = str(sub.subreddit)
+                    created = int(sub.created)
+                    author = str(sub.author)
+                    skips = 0
+                    for n in r.redditor(author).submissions.new(limit = 10):                        # check recent posts
+                        if n.created > created-24*60*60 and t0 != created:skips = 1
+                    if skips == 1:
+                        stops.append(ID)
+                        output = [str(time.time()),subr,str(created),ID,author,"stop","NA","NA"]    # output if author has made other recent posts                    
+                    else:
+                        user = r.redditor(str(author))
+                        link = str(user.link_karma)
+                        score = str(sub.score)
+                        output = [str(time.time()),subr,str(created),ID,author,link,score,"NA"]     # output if everything goes correctly
+                        
+                    print(output)
+                    if (int(score))/abs(time.time()-float(created-8*60*60)) < 1/drops:              # created time must be corrected for time zone
+                        output = ["NA NA NA "+str(ID)+" NA stop NA NA"]                             # output if post gains upvotes to slowly
+                        stops.append(ID)
+                except Exception as e:
+                    stops.append(ID)
+                    output = [str(time.time()),"NA","NA",ID,"NA","stop","NA","NA"]                  # output if error occurs, e.g. user deletes account
+                    print(output,e)
+                data.write(" ".join(output)+"\n")
+            data.close()
+        
+
+
+
+            
